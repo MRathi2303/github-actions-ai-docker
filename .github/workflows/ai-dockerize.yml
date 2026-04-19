@@ -39,3 +39,24 @@ jobs:
 
       - name: Show generated Dockerfile
         run: cat Dockerfile.generated
+
+      - name: Upload Dockerfile as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-dockerfile
+          path: Dockerfile.generated
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image to ECR
+        env:
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+        run: |
+          IMAGE_TAG=${{ github.sha }}
+          docker build -f Dockerfile.generated -t $ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REPOSITORY:$IMAGE_TAG $ECR_REPOSITORY:latest
+          docker push $ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REPOSITORY:latest
+          echo "Image pushed: $ECR_REPOSITORY:$IMAGE_TAG"
