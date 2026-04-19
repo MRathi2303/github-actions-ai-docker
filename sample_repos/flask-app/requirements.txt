@@ -1,1 +1,5 @@
-flask==3.0\ncelery==5.3\npsycopg2==2.9
+flask==3.0.0
+gunicorn==21.2.0
+celery==5.3.6
+psycopg2-binary==2.9.9
+EOF
