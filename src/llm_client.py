@@ -1,20 +1,33 @@
+import os
+import pathlib
 import boto3
 import json
 import yaml
 
+
 def load_config(config_path: str = "config.yaml") -> dict:
-    """Reads your personal config.yaml and return it as a dictionary."""
-    with open(config_path, "r") as f:
-        return yaml.safe_load(f)
-    
+    """
+    Loads config from file if available, otherwise from environment variables.
+    File is used locally, env vars are used in CI.
+    """
+    if pathlib.Path(config_path).exists():
+        with open(config_path, "r") as f:
+            return yaml.safe_load(f)
+
+    # CI environment — read from environment variables
+    return {
+        "bedrock": {
+            "region": os.environ["BEDROCK_REGION"],
+            "model_id": os.environ["BEDROCK_MODEL_ID"]
+        }
+    }
+
 
 def build_prompt(context: dict) -> str:
     """
     Converts the repo context dictionary into a text prompt
-    that LLM can understand and act on.
+    that the LLM can understand and act on.
     """
-
-    # Are we generating or auditing?
     if context["existing_dockerfile"]:
         mode = f"""
 An existing Dockerfile was found. AUDIT it instead of generating a new one.
@@ -48,7 +61,7 @@ REQUIREMENTS:
 
 CRITICAL: Respond ONLY with a valid JSON object.
 - In copy_commands, always include a space before the destination dot: "COPY file ." not "COPY file."
-No markdown, no explanation, no code blocks. Just raw JSON.
+- No markdown, no explanation, no code blocks. Just raw JSON.
 
 Use exactly this structure:
 {{
@@ -100,7 +113,12 @@ def mock_bedrock_response(context: dict) -> dict:
 
     return templates.get(language, templates["python"])
 
+
 def call_bedrock(prompt: str, config: dict, context: dict = None) -> dict:
+    """
+    Sends the prompt to the LLM via AWS Bedrock.
+    Returns the parsed JSON response.
+    """
     try:
         model_id = config["bedrock"]["model_id"]
 
@@ -157,81 +175,6 @@ def call_bedrock(prompt: str, config: dict, context: dict = None) -> dict:
     except Exception as e:
         print(f"Bedrock unavailable ({type(e).__name__}). Using mock response.")
         return mock_bedrock_response(context or {})
-    try:
-        client = boto3.client(
-            service_name="bedrock-runtime",
-            region_name=config["bedrock"]["region"]
-        )
-
-        request_body = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 1000,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
-        }
-
-        response = client.invoke_model(
-            modelId=config["bedrock"]["model_id"],
-            body=json.dumps(request_body)
-        )
-
-        response_body = json.loads(response["body"].read())
-        raw_text = response_body["content"][0]["text"]
-
-        try:
-            return json.loads(raw_text)
-        except json.JSONDecodeError:
-            start = raw_text.find("{")
-            end = raw_text.rfind("}") + 1
-            if start != -1 and end != 0:
-                return json.loads(raw_text[start:end])
-            else:
-                raise ValueError(f"Could not extract JSON from response: {raw_text}")
-
-    except Exception as e:
-        print(f"Bedrock unavailable ({type(e).__name__}). Using mock response.")
-        return mock_bedrock_response(context or {})
-    """
-    Sends the prompt to Claude via AWS Bedrock.
-    Returns the parsed JSON response.
-    """
-
-    # Create a Bedrock client pointed at your region
-    client = boto3.client(
-        service_name="bedrock-runtime",
-        region_name=config["bedrock"]["region"]
-    )
-
-    # This is the exact format Bedrock expects
-    request_body = {
-        "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 1000,
-        "messages": [
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
-    }
-
-    # Make the API call
-    response = client.invoke_model(
-        modelId=config["bedrock"]["model_id"],
-        body=json.dumps(request_body)
-    )
-
-    # The response body is a stream — we read and decode it
-    response_body = json.loads(response["body"].read())
-
-    # Claude's reply is inside content[0]["text"]
-    raw_text = response_body["content"][0]["text"]
-
-    # Parse the JSON Claude returned
-    return json.loads(raw_text)
 
 
 if __name__ == "__main__":
@@ -241,11 +184,11 @@ if __name__ == "__main__":
     context = collect_context("sample_repos/flask-app")
     prompt = build_prompt(context)
 
-    print("=== PROMPT BEING SENT TO CLAUDE ===")
+    print("=== PROMPT BEING SENT TO NOVA ===")
     print(prompt)
     print("\n=== CALLING BEDROCK ===")
 
-    result = call_bedrock(prompt, config)
+    result = call_bedrock(prompt, config, context)
 
-    print("\n=== CLAUDE'S RESPONSE ===")
+    print("\n=== NOVA'S RESPONSE ===")
     print(json.dumps(result, indent=2))

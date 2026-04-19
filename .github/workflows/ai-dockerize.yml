@@ -32,6 +32,9 @@ jobs:
           aws-region: ap-south-1
 
       - name: Generate Dockerfile
+        env:
+          BEDROCK_REGION: ${{ secrets.AWS_REGION }}
+          BEDROCK_MODEL_ID: ${{ secrets.BEDROCK_MODEL_ID }}
         run: python3 main.py $GITHUB_WORKSPACE
 
       - name: Show generated Dockerfile
