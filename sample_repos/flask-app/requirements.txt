@@ -1,0 +1,1 @@
+flask==3.0\ncelery==5.3\npsycopg2==2.9

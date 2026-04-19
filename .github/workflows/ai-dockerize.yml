@@ -1,0 +1,38 @@
+name: AI Dockerfile Generator
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  generate-dockerfile:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install boto3 pyyaml
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-south-1
+
+      - name: Generate Dockerfile
+        run: python3 main.py $GITHUB_WORKSPACE
+
+      - name: Show generated Dockerfile
+        run: cat Dockerfile.generated
