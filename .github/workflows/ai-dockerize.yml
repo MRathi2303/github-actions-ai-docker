@@ -79,7 +79,5 @@ jobs:
 
       - name: Push Docker image to ECR
         run: |
-          docker tag ${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} ${{ env.ECR_REPOSITORY }}:latest
           docker push ${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
-          docker push ${{ env.ECR_REPOSITORY }}:latest
           echo "Image pushed: ${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}"

@@ -90,3 +90,9 @@ Measured results from the sample application:
 - 1 automated pipeline test passing
 - 10 local benchmark runs with 0.22 ms mean and 0.44 ms p95 generation time
 - Successful container health check through `/health`
+
+### Resume bullets
+
+- Built a Python and Groq-powered tool that analyzes application repositories, detects language, dependencies, entry point, and port, and generates production-ready Dockerfiles automatically.
+- Designed multi-stage, non-root Docker images and reduced the sample application to a 55.5 MB runtime image; verified the container health endpoint and passed Trivy with 0 HIGH/CRITICAL vulnerabilities.
+- Implemented GitHub Actions CI/CD with AWS OIDC and Amazon ECR, publishing immutable commit-SHA images through an 81-second build, scan, and push workflow.
