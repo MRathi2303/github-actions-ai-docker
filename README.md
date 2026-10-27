@@ -77,3 +77,16 @@ The ECR repository used for this project is:
 - Trivy found 0 HIGH or CRITICAL vulnerabilities in the final image.
 - GitHub Actions successfully pushed the image to ECR.
 - The local pipeline benchmark completed 10 runs with a mean of 0.22 ms and p95 of 0.44 ms for repository inspection and Dockerfile generation.
+
+## Resume description
+
+Built an AI-assisted DevOps pipeline that analyzes application repositories and generates production Dockerfiles using Groq. Automated testing, multi-stage non-root Docker builds, Trivy vulnerability scanning, and SHA-tagged Amazon ECR publishing through GitHub Actions and OIDC authentication.
+
+Measured results from the sample application:
+
+- 55.5 MB final Docker image
+- 0 HIGH or CRITICAL vulnerabilities in the Trivy scan
+- 81-second end-to-end GitHub Actions workflow
+- 1 automated pipeline test passing
+- 10 local benchmark runs with 0.22 ms mean and 0.44 ms p95 generation time
+- Successful container health check through `/health`
