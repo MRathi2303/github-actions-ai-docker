@@ -16,7 +16,6 @@ jobs:
       - run: python -m unittest discover -s tests -v
 
   generate-dockerfile:
-    if: ${{ secrets.AWS_ROLE_ARN != '' && secrets.GROQ_API_KEY != '' && secrets.ECR_REPOSITORY != '' }}
     runs-on: ubuntu-latest
 
     permissions:
