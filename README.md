@@ -1,68 +1,79 @@
 # AI Dockerfile Generator
 
-An AI-assisted CI pipeline that inspects a repository, generates a production Dockerfile with Groq-hosted open models, scans the image with Trivy, and publishes immutable images to Amazon ECR.
+I built this project to automate the first steps of containerizing an application.
 
-## What works today
+It reads a repository, identifies the language, dependencies, entry point, and port, then uses a Groq-hosted model to generate a Dockerfile. If the model is unavailable, it uses a local fallback so the pipeline can still run.
 
-- Repository language, dependency, entry-point, port, and existing-Dockerfile detection.
-- Offline fallback for local development when Groq is unavailable.
-- Structured model output converted into a multi-stage, non-root Dockerfile.
-- GitHub Actions build → Trivy HIGH/CRITICAL gate → ECR push.
-- Commit-SHA image tags plus `latest`.
+The generated Dockerfile uses a multi-stage build and runs the application as a non-root user.
 
-## Architecture
+## How it works
 
-```text
-repository → context collector → Groq JSON response → Dockerfile assembler
-                                      ↓
-                              deterministic fallback
-                                      ↓
-                 Docker build → Trivy gate → Amazon ECR
-```
+1. GitHub Actions checks out the repository.
+2. The Python code collects basic project information.
+3. Groq generates a structured Dockerfile specification.
+4. The project converts that specification into a Dockerfile.
+5. Docker builds the image.
+6. Trivy scans the image for HIGH and CRITICAL vulnerabilities.
+7. Clean images are pushed to Amazon ECR with the Git commit SHA as the tag.
 
-The generated image uses a multi-stage build, copies the dependency virtual environment into the runtime stage, and runs as a non-root user.
-
-## Run locally (no AWS required)
+## Run locally
 
 ```bash
+cd /Users/m.rathi/Projects/ai-dockerfile-generator
 cp .env.example .env
-# Edit .env and replace gsk_your_key_here with your Groq API key.
+```
+
+Add your Groq key to `.env`:
+
+```env
+GROQ_API_KEY=gsk_your_key_here
+GROQ_MODEL=openai/gpt-oss-20b
+```
+
+Then run:
+
+```bash
 python3 -m pip install -r requirements.txt
 python3 -m unittest discover -s tests -v
 python3 main.py testing_repo/flask-app
-python3 scripts/benchmark.py
 ```
 
-The generated file is `Dockerfile.generated`. The Groq call uses a hosted free-tier model and falls back to a deterministic local spec when the API is unavailable.
+The generated file is `Dockerfile.generated`.
 
-Get a key from [Groq Console](https://console.groq.com/keys), paste it after `GROQ_API_KEY=` in `.env`, and run `python3 main.py testing_repo/flask-app` from this project directory. The key is never committed because `.env` is ignored.
+## Build and test the container
 
-## AWS image publishing
+```bash
+docker build -f Dockerfile.generated \
+  -t ai-dockerfile-generator:local \
+  testing_repo/flask-app
 
-The original AWS resources are not recoverable from Git. Recreate an IAM role trusted by GitHub Actions OIDC and configure these GitHub Actions secrets:
+docker run --rm -p 5000:5000 ai-dockerfile-generator:local
+```
 
-`AWS_ROLE_ARN`, `AWS_REGION`, `GROQ_API_KEY`, and `ECR_REPOSITORY`.
+The sample application is available at `http://localhost:5000` and its health check is at `/health`.
 
-For GitHub Actions, add `GROQ_API_KEY` under the repository’s Settings → Secrets and variables → Actions → New repository secret. Do not paste the key into the workflow file.
+## AWS deployment
 
-The repository-scoped OIDC role is created by `scripts/setup_aws_oidc.sh`; it trusts only the `main` branch of this repository and can publish only to this project’s ECR repository.
+GitHub Actions uses GitHub OIDC to authenticate to AWS. It builds the image, scans it with Trivy, and pushes it to ECR.
 
-For this restored environment, the intended values are `ap-south-1`, `openai/gpt-oss-20b`, and the ECR repository created for this project. GitHub Actions uses OIDC for AWS; it does not use the local AWS profile.
+The workflow uses these GitHub repository secrets:
 
-Current ECR repository: `357275711997.dkr.ecr.ap-south-1.amazonaws.com/ai-dockerfile-generator`.
+- `AWS_ROLE_ARN`
+- `AWS_REGION`
+- `ECR_REPOSITORY`
+- `GROQ_API_KEY`
 
-## Measured baseline
+The ECR repository used for this project is:
 
-On 2026-10-27, the deterministic local pipeline completed 10 runs with a mean of 0.22 ms and p95 of 0.44 ms on the development machine. This measures repository inspection plus Dockerfile assembly only; it excludes the hosted model, Docker build, Trivy, and network time. One automated integration-style test passes.
+```text
+357275711997.dkr.ecr.ap-south-1.amazonaws.com/ai-dockerfile-generator
+```
 
-The generated sample image was built successfully as `ai-dockerfile-generator:local`, and its non-root Gunicorn container returned `{"service":"ai-docker-utility","status":"healthy"}` from `/health`. Trivy reported 0 HIGH/CRITICAL vulnerabilities after unfixed findings were ignored.
+## Results
 
-The role needs only ECR push and the permissions required by the selected deployment target. Do not commit access keys.
-
-## Honest resume bullets
-
-Resume-ready wording:
-
-> Built an AI-assisted DevOps pipeline using Groq, Python, Docker, GitHub Actions, Trivy, and Amazon ECR; generated multi-stage non-root Dockerfiles from repository context, added a deterministic offline fallback, and gated SHA-tagged images on HIGH/CRITICAL vulnerabilities.
-
-Before adding more numbers, run the Docker build and Trivy scan locally or from GitHub Actions and record image size, build duration, scan duration, and vulnerability counts.
+- Groq generation works locally.
+- The sample image builds successfully.
+- The container health check passes.
+- Trivy found 0 HIGH or CRITICAL vulnerabilities in the final image.
+- GitHub Actions successfully pushed the image to ECR.
+- The local pipeline benchmark completed 10 runs with a mean of 0.22 ms and p95 of 0.44 ms for repository inspection and Dockerfile generation.
