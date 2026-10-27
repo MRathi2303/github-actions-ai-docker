@@ -1,7 +1,7 @@
 import sys
 import json
 from src.context_collector import collect_context
-from src.llm_client import load_config, build_prompt, call_bedrock
+from src.llm_client import load_config, build_prompt, call_groq
 from src.dockerfile_assembler import assemble_dockerfile
 
 
@@ -12,14 +12,14 @@ def run(repo_path: str):
     print(f"Entry point: {context.get('entry_point', 'unknown')}")
     print(f"Dependencies: {context.get('dependency_file', 'none found')}")
 
-    print("\n--- Step 2: Building prompt and calling Claude ---")
+    print("\n--- Step 2: Building prompt and calling Groq ---")
     config = load_config()
     prompt = build_prompt(context)
-    spec = call_bedrock(prompt, config, context)
-    print("\n=== RAW SPEC FROM NOVA ===")
+    spec = call_groq(prompt, config, context)
+    print("\n=== RAW SPEC FROM GROQ ===")
     print(json.dumps(spec, indent=2))
-    print("Claude responded with a valid Dockerfile spec")
-    print(f"Notes from Claude: {spec.get('notes', '')}")
+    print("Groq returned a valid Dockerfile spec")
+    print(f"Notes from model: {spec.get('notes', '')}")
 
     print("\n--- Step 3: Assembling Dockerfile ---")
     dockerfile = assemble_dockerfile(spec, output_path="Dockerfile.generated")

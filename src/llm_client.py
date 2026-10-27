@@ -1,8 +1,7 @@
 import os
 import pathlib
-import boto3
 import json
-import yaml
+import subprocess
 
 
 def load_config(config_path: str = "config.yaml") -> dict:
@@ -10,17 +9,24 @@ def load_config(config_path: str = "config.yaml") -> dict:
     Loads config from file if available, otherwise from environment variables.
     File is used locally, env vars are used in CI.
     """
+    env_path = pathlib.Path(".env")
+    if env_path.exists():
+        for line in env_path.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, value = line.split("=", 1)
+                os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
     if pathlib.Path(config_path).exists():
+        import yaml
         with open(config_path, "r") as f:
             return yaml.safe_load(f)
 
     # CI environment — read from environment variables
-    return {
-        "bedrock": {
-            "region": os.environ["BEDROCK_REGION"],
-            "model_id": os.environ["BEDROCK_MODEL_ID"]
-        }
-    }
+    return {"groq": {
+        "api_key": os.environ.get("GROQ_API_KEY", ""),
+        "model": os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b"),
+    }}
 
 
 def build_prompt(context: dict) -> str:
@@ -78,9 +84,9 @@ Use exactly this structure:
     return prompt.strip()
 
 
-def mock_bedrock_response(context: dict) -> dict:
+def mock_model_response(context: dict) -> dict:
     """
-    Returns a hardcoded spec when Bedrock is unavailable.
+    Returns a hardcoded spec when the hosted model is unavailable.
     Used for local development and testing.
     """
     language = context.get("language", "python")
@@ -114,67 +120,33 @@ def mock_bedrock_response(context: dict) -> dict:
     return templates.get(language, templates["python"])
 
 
-def call_bedrock(prompt: str, config: dict, context: dict = None) -> dict:
+def call_groq(prompt: str, config: dict, context: dict = None) -> dict:
     """
-    Sends the prompt to the LLM via AWS Bedrock.
+    Sends the prompt to the hosted Groq model.
     Returns the parsed JSON response.
     """
     try:
-        model_id = config["bedrock"]["model_id"]
-
-        client = boto3.client(
-            service_name="bedrock-runtime",
-            region_name=config["bedrock"]["region"]
-        )
-
-        # Build request based on provider
-        if "anthropic" in model_id:
-            request_body = {
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 1000,
-                "messages": [{"role": "user", "content": prompt}]
-            }
-        else:
-            # Amazon Nova format
-            request_body = {
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [{"text": prompt}]
-                    }
-                ],
-                "inferenceConfig": {
-                    "max_new_tokens": 1000
-                }
-            }
-
-        response = client.invoke_model(
-            modelId=model_id,
-            body=json.dumps(request_body)
-        )
-
-        response_body = json.loads(response["body"].read())
-
-        # Parse response based on provider
-        if "anthropic" in model_id:
-            raw_text = response_body["content"][0]["text"]
-        else:
-            # Amazon Nova format
-            raw_text = response_body["output"]["message"]["content"][0]["text"]
-
-        try:
-            return json.loads(raw_text)
-        except json.JSONDecodeError:
-            start = raw_text.find("{")
-            end = raw_text.rfind("}") + 1
-            if start != -1 and end != 0:
-                return json.loads(raw_text[start:end])
-            else:
-                raise ValueError(f"Could not extract JSON from response: {raw_text}")
-
+        api_key = config["groq"]["api_key"]
+        if not api_key:
+            raise RuntimeError("GROQ_API_KEY is not configured")
+        body = json.dumps({
+            "model": config["groq"]["model"],
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0,
+            "response_format": {"type": "json_object"},
+        }).encode()
+        response = subprocess.run([
+            "curl", "--fail-with-body", "--silent", "--show-error", "--max-time", "60",
+            "https://api.groq.com/openai/v1/chat/completions",
+            "-H", f"Authorization: Bearer {api_key}",
+            "-H", "Content-Type: application/json",
+            "--data", body,
+        ], capture_output=True, text=True, check=True)
+        raw_text = json.loads(response.stdout)["choices"][0]["message"]["content"]
+        return json.loads(raw_text)
     except Exception as e:
-        print(f"Bedrock unavailable ({type(e).__name__}). Using mock response.")
-        return mock_bedrock_response(context or {})
+        print(f"Groq unavailable ({type(e).__name__}). Using mock response.")
+        return mock_model_response(context or {})
 
 
 if __name__ == "__main__":
@@ -186,9 +158,9 @@ if __name__ == "__main__":
 
     print("=== PROMPT BEING SENT TO NOVA ===")
     print(prompt)
-    print("\n=== CALLING BEDROCK ===")
+    print("\n=== CALLING GROQ ===")
 
-    result = call_bedrock(prompt, config, context)
+    result = call_groq(prompt, config, context)
 
     print("\n=== NOVA'S RESPONSE ===")
     print(json.dumps(result, indent=2))

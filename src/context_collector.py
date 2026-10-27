@@ -66,7 +66,7 @@ def collect_context(repo_path:str) -> dict:
                         break
             except Exception:
                 pass
-    context["ports_hints"] = ports_found
+    context["port_hints"] = ports_found
 
     # --- Stage 5: check if a Dockerfile exists ---
     dockerfile_path = root / "Dockerfile"

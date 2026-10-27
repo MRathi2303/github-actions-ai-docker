@@ -3,7 +3,7 @@ import pathlib
 
 def assemble_dockerfile(spec: dict, output_path: str = "Dockerfile.generated") -> str:
     """
-    Takes the JSON spec from Claude and assembles
+    Takes the JSON spec from the hosted model and assembles
     it into an actual Dockerfile string.
     """
     lines = []
@@ -11,13 +11,14 @@ def assemble_dockerfile(spec: dict, output_path: str = "Dockerfile.generated") -
     # --- Build stage ---
     lines.append(f"FROM {spec['build_stage_image']} AS builder")
     lines.append("WORKDIR /app")
+    lines.append("RUN python -m venv /opt/venv")
+    lines.append("ENV PATH=\"/opt/venv/bin:$PATH\"")
     lines.append("")
 
     # Copy and install dependencies
     for cmd in spec["copy_commands"]:
-        if "requirements" in cmd or "package.json" in cmd:
-            fixed = cmd.replace("txt.", "txt .").replace("json.", "json .")
-            lines.append(fixed)
+        fixed = cmd.replace("txt.", "txt .").replace("json.", "json .")
+        lines.append(fixed)
 
     for cmd in spec["install_commands"]:
         lines.append(f"RUN {cmd}")
@@ -27,6 +28,7 @@ def assemble_dockerfile(spec: dict, output_path: str = "Dockerfile.generated") -
     # --- Runtime stage ---
     lines.append(f"FROM {spec['base_image']}")
     lines.append("WORKDIR /app")
+    lines.append("ENV PATH=\"/opt/venv/bin:$PATH\"")
     lines.append("")
 
     # Environment variables
@@ -36,6 +38,7 @@ def assemble_dockerfile(spec: dict, output_path: str = "Dockerfile.generated") -
     lines.append("")
 
     # Copy built artifacts from builder
+    lines.append("COPY --from=builder /opt/venv /opt/venv")
     lines.append("COPY --from=builder /app /app")
     lines.append("")
 
@@ -73,7 +76,7 @@ def json_list_to_dockerfile(items: list) -> str:
 
 
 if __name__ == "__main__":
-    # Test with the exact response Claude gave us
+    # Test with a representative model response
     sample_spec = {
         "base_image": "python:3.11-slim",
         "build_stage_image": "python:3.11",

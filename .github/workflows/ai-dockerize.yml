@@ -6,7 +6,17 @@ on:
       - main
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m unittest discover -s tests -v
+
   generate-dockerfile:
+    if: ${{ secrets.AWS_ROLE_ARN != '' && secrets.GROQ_API_KEY != '' && secrets.ECR_REPOSITORY != '' }}
     runs-on: ubuntu-latest
 
     permissions:
@@ -23,18 +33,18 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install boto3 pyyaml
+        run: pip install -r requirements.txt
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ap-south-1
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Generate Dockerfile
         env:
-          BEDROCK_REGION: ${{ secrets.AWS_REGION }}
-          BEDROCK_MODEL_ID: ${{ secrets.BEDROCK_MODEL_ID }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_MODEL: openai/gpt-oss-20b
         run: python3 main.py $GITHUB_WORKSPACE
 
       - name: Show generated Dockerfile
